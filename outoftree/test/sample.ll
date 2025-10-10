@@ -1,59 +1,38 @@
-; ModuleID = 'sample.c'
-source_filename = "sample.c"
+; ModuleID = '../test/sample.c'
+source_filename = "../test/sample.c"
 target datalayout = "e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128"
 target triple = "x86_64-pc-linux-gnu"
-
-@.str = private unnamed_addr constant [4 x i8] c"%d\0A\00", align 1
-
-; Function Attrs: noinline nounwind optnone uwtable
-define dso_local i32 @sum(i32 noundef %0, i32 noundef %1) #0 {
-  %3 = alloca i32, align 4
-  %4 = alloca i32, align 4
-  store i32 %0, ptr %3, align 4
-  store i32 %1, ptr %4, align 4
-  %5 = load i32, ptr %3, align 4
-  %6 = load i32, ptr %4, align 4
-  %7 = add nsw i32 %5, %6
-  ret i32 %7
-}
-
-; Function Attrs: noinline nounwind optnone uwtable
-define dso_local i32 @sub(i32 noundef %0, i32 noundef %1) #0 {
-  %3 = alloca i32, align 4
-  %4 = alloca i32, align 4
-  store i32 %0, ptr %3, align 4
-  store i32 %1, ptr %4, align 4
-  %5 = load i32, ptr %3, align 4
-  %6 = load i32, ptr %4, align 4
-  %7 = sub nsw i32 %5, %6
-  ret i32 %7
-}
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @mul(i32 noundef %0, i32 noundef %1) #0 {
   %3 = alloca i32, align 4
   %4 = alloca i32, align 4
+  %5 = alloca i32, align 4
+  %6 = alloca [3 x i32], align 4
+  %7 = alloca ptr, align 8
   store i32 %0, ptr %3, align 4
   store i32 %1, ptr %4, align 4
-  %5 = load i32, ptr %3, align 4
-  %6 = load i32, ptr %4, align 4
-  %7 = mul nsw i32 %5, %6
-  ret i32 %7
+  %8 = load i32, ptr %3, align 4
+  %9 = load i32, ptr %4, align 4
+  %10 = mul nsw i32 %8, %9
+  store i32 %10, ptr %5, align 4
+  %11 = getelementptr inbounds [3 x i32], ptr %6, i64 0, i64 1
+  store ptr %11, ptr %7, align 8
+  %12 = load ptr, ptr %7, align 8
+  store i32 10, ptr %12, align 4
+  %13 = load i32, ptr %5, align 4
+  ret i32 %13
 }
 
 ; Function Attrs: noinline nounwind optnone uwtable
 define dso_local i32 @main() #0 {
   %1 = alloca i32, align 4
   store i32 0, ptr %1, align 4
-  %2 = call i32 @sum(i32 noundef 10, i32 noundef 9)
-  %3 = call i32 (ptr, ...) @printf(ptr noundef @.str, i32 noundef %2)
+  %2 = call i32 @mul(i32 noundef 10, i32 noundef 9)
   ret i32 0
 }
 
-declare i32 @printf(ptr noundef, ...) #1
-
 attributes #0 = { noinline nounwind optnone uwtable "frame-pointer"="all" "min-legal-vector-width"="0" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
-attributes #1 = { "frame-pointer"="all" "no-trapping-math"="true" "stack-protector-buffer-size"="8" "target-cpu"="x86-64" "target-features"="+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87" "tune-cpu"="generic" }
 
 !llvm.module.flags = !{!0, !1, !2, !3, !4}
 !llvm.ident = !{!5}

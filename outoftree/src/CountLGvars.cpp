@@ -27,6 +27,7 @@ PreservedAnalyses CountLGvars::run(Module &M,ModuleAnalysisManager &AM){
                     if(auto *cmp = dyn_cast<ICmpInst>(&I)){
                         errs()<<"Comparison : "<<cmp->getPredicateName(cmp->getPredicate())<<"\n";
                     }
+
                     if(auto *br = dyn_cast<BranchInst>(&I)){
                         if(br->isConditional()){
                             errs()<<"Branch Instruction"<<"\n";
@@ -37,6 +38,7 @@ PreservedAnalyses CountLGvars::run(Module &M,ModuleAnalysisManager &AM){
                         errs() << "Local Variable allocation\n";
                         count++;
                     }
+                    
                     if(isa<LoadInst>(&I)){
                         errs() << "Loading from memory\n";
                     }
@@ -44,8 +46,9 @@ PreservedAnalyses CountLGvars::run(Module &M,ModuleAnalysisManager &AM){
                         errs() << "Storing to memory\n";
                     }
 
-                    if(isa<GetElementPtrInst>(&I)){
-                        errs() << "Pointer arithmetic\n";
+                    if (auto *GEP = dyn_cast<GetElementPtrInst>(&I)) {
+                        errs() << "Pointer arithmetic: " << I << "\n";
+                        errs() << "Source element type: " << *GEP->getSourceElementType() << "\n";
                     }
 
                     if(auto *call = dyn_cast<CallBase>(&I)){
