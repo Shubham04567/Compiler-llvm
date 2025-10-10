@@ -1,1 +1,0 @@
-/usr/bin/c++ -fPIC -shared  -o libCountLGvars.so CMakeFiles/CountLGvars.dir/src/CountLGvars.cpp.o 

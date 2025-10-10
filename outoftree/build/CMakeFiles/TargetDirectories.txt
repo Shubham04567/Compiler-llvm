@@ -1,8 +1,0 @@
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/intrinsics_gen.dir
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/omp_gen.dir
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/acc_gen.dir
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/RISCVTargetParserTableGen.dir
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/HelloWorldPass.dir
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/CountLGvars.dir
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/edit_cache.dir
-/home/induman/Compiler-llvm/outoftree/build/CMakeFiles/rebuild_cache.dir
