@@ -23,3 +23,8 @@ add_library(CountLGvars MODULE src/CountLGvars.cpp)
 set_target_properties(CountLGvars PROPERTIES
     COMPILE_FLAGS "-fno-rtti"
 )
+
+add_library(AsanPass MODULE src/AsanPass.cpp)
+set_target_properties(AsanPass PROPERTIES
+    COMPILE_FLAGS "-fno-rtti"
+)
