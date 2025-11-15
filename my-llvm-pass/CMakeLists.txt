@@ -1,21 +1,18 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.13)
+project(MyLLVMPasses LANGUAGES C CXX)
 
-project(MyProject VERSION 1.0 LANGUAGES CXX)
-
-set(CMAKE_CXX_STANDARD 17)
-set(CMAKE_CXX_STANDARD_REQUIRED True)
-
+# Find LLVM
 find_package(LLVM REQUIRED CONFIG)
 
+# Print LLVM info
+message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
+message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
+
+# Include LLVM headers
 include_directories(${LLVM_INCLUDE_DIRS})
-separate_arguments(LLVM_DEFINITIONS_LIST NATIVE_COMMAND ${LLVM_DEFINITIONS})
 add_definitions(${LLVM_DEFINITIONS})
 
-# 1. Build the InstructorCounter pass
-add_library(InstructorCounter MODULE lib/InstructorCounter.cpp)
-
-# 2. Build the FindPrintfPass
-add_library(FindPrintfPass MODULE lib/FindPrintfPass.cpp)
-
-# 3. Build the ShiftUsePass
-add_library(ShiftUsePass MODULE lib/ShiftUsePass.cpp)
+add_library(ReallocPass MODULE lib/ReallocPass.cpp)
+set_target_properties(ReallocPass PROPERTIES
+    COMPILE_FLAGS "-fno-rtti"
+)
