@@ -1,26 +1,36 @@
 #include "../include/logger.h"
+#include<iostream>
+#include<cstring>
+#include<unordered_map>
 
-static FILE *logFile = NULL;
 
-void __asan_log_violation(const char* msg, const char* srcfile) {
-    if (!logFile) {
-        // construct file name from source module
-        char filename[256];
-        snprintf(filename, sizeof(filename), "%s.asanlog", srcfile);
-        logFile = fopen(filename, "w");
-        if (!logFile) {
-            logFile = stderr; // fallback
-        }
+static std::unordered_map<std::string, FILE*> filenameMap;
+
+extern "C" void __asan_log_violation(const char* msg, const char* srcfile) {
+
+    std::string filename = std::string(srcfile) + ".asanlog";
+
+    FILE* fp = nullptr;
+
+    if (!filenameMap.count(filename)) {
+        fp = fopen(filename.c_str(), "w");  // truncate old file
+        if (!fp) return; // fail silently or handle error
+        filenameMap[filename] = fp;
+    } else {
+        fp = filenameMap[filename];  // reuse open file
     }
 
+    // Prepare timestamp
     time_t now = time(NULL);
-    fprintf(logFile, "[%s] %s\n", ctime(&now), msg);
-    fflush(logFile);
+    char *t = ctime(&now);
+    t[strcspn(t, "\n")] = '\0';  // remove newline
+
+    // Write log
+    fprintf(fp, "[ %s ] %s\n", t, msg);
+    fflush(fp); // ensure immediate write
 }
 
 string getBaseName(string modulePath){
-    // size_t pos = modulePath.find_last_of("/\\");
-    // string base = (pos == std::string::npos) ? (modulePath) : modulePath.substr(pos+1);
 
     size_t dot = modulePath.find_last_of('.');
 
@@ -28,5 +38,3 @@ string getBaseName(string modulePath){
 
     return modulePath;
 }
-
-

@@ -1,104 +1,106 @@
 #include "../include/AsanPass.h"
 #include "../include/logger.h"
-#include "llvm/IR/Function.h"
-#include "llvm/IR/Module.h"
-#include "llvm/Passes/PassPlugin.h"
 #include "llvm/Passes/PassBuilder.h"
-#include "llvm/Support/raw_ostream.h"
-#include "llvm/IR/DebugLoc.h"
-#include "llvm/IR/Instructions.h"
-#include "llvm/IR/CFG.h"
-#include "llvm/IR/InstrTypes.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Type.h"
-#include "llvm/IR/DerivedTypes.h"
-#include "llvm/IR/IRBuilder.h"
+#include <string>
 
 using namespace llvm;
 
 PreservedAnalyses AsanPass::run(Module &M, ModuleAnalysisManager &AM) {
-
-    errs() << "AsanPass: running on module: " << M.getSourceFileName() << "\n";
-
+    // errs() << "AsanPass: running on module: " << M.getSourceFileName() << "\n";
     std::string sourcefile = getBaseName(M.getSourceFileName());
 
-    llvm::LLVMContext &Ctx = M.getContext();
-
-    llvm::Type *Int8PtrTy = llvm::PointerType::getUnqual(llvm::Type::getInt8Ty(Ctx));
-
-    llvm::FunctionType *LogFuncTy =
-        llvm::FunctionType::get(llvm::Type::getVoidTy(Ctx),
-                                {Int8PtrTy, Int8PtrTy}, false);
-
     llvm::FunctionCallee LogFunc =
-        M.getOrInsertFunction("__asan_log_violation", LogFuncTy);
-
-    
-    
-    
+        PassUtils::declareIllegalAccessLogger(&M);
 
     for (Function &F : M) {
+        if (F.isDeclaration()) continue;
+        BasicBlock *safeExit = PassUtils::createCanonicalSafeExit(F);
 
         for (BasicBlock &BB : F) {
-
             for (Instruction &I : BB) {
-                
+
                 if (auto *callInst = dyn_cast<CallInst>(&I)) {
-                    
+
                     if (Function *calledFunc = callInst->getCalledFunction()) {
-                    
+
                         if (calledFunc->getName().starts_with("__asan_report_")) {
-                                
-                                // putting the call of log function    
-                                // ---- Build log message ----
-                                std::string logMsg = "ASAN violation in function: " + F.getName().str();
-                                if (I.getDebugLoc()) {
-                                    const DebugLoc &DL = I.getDebugLoc();
-                                    logMsg += " at " + DL->getFilename().str() + ":" +
-                                            std::to_string(DL->getLine());
-                                }
 
-                                // errs() << logMsg << "\n";
+                            
 
-                                IRBuilder<> Bb(&I);
-                                Value *msgPtr = Bb.CreateGlobalStringPtr(logMsg);
-                                Value *sourcefilePtr = Bb.CreateGlobalStringPtr(sourcefile);
-                                Bb.CreateCall(LogFunc, {msgPtr, sourcefilePtr});
+                            // --- Start of instrumentation ---
+                            // 1) Build log message
+                            std::string logMsg = PassUtils::createLogMsg(&I);
+                            unsigned faultLine = I.getDebugLoc().getLine();
 
-                                BasicBlock* pred = BB.getSinglePredecessor();
-                                BranchInst *BI = dyn_cast<BranchInst>(pred->getTerminator());
+                            // 2) Identify asanBlock (block that contains the call inst)
+                            BasicBlock *asanBlock = I.getParent();
+                            BasicBlock *pred = asanBlock->getSinglePredecessor();
+                            if (!pred) {
+                                // errs() << "AsanPass: skipping site - no single predecessor\n";
+                                continue;
+                            }
 
-                                BasicBlock *succ = nullptr;
-                                if (BI->getSuccessor(0) == &BB) {
-                                    succ = BI->getSuccessor(1);
-                                } else {
-                                    succ = BI->getSuccessor(0);
-                                }
-                                        
-                      
-                                BasicBlock* newSafeBlock = succ->splitBasicBlock((*succ->getFirstInsertionPt()).getNextNode(),"safe_block");
-                                
-                                // now jump from predessor to to succ;
-                        
-                                Value* cond = BI->getCondition();
+                            BranchInst *predTerm = dyn_cast<BranchInst>(pred->getTerminator());
+                            if (!predTerm || predTerm->isUnconditional()) {
+                                // errs() << "AsanPass: skipping site - predecessor terminator not conditional\n";
+                                continue;
+                            }
 
-                                IRBuilder<> B(BI);
-                                B.CreateCondBr(cond,&BB,succ);
-                                BI->eraseFromParent();
+                            // 3) Find the normal successor (the block taken when no fault)
+                            BasicBlock *succ = (predTerm->getSuccessor(0) == asanBlock) ? predTerm->getSuccessor(1)
+                                                                                        : predTerm->getSuccessor(0);
+                            if (!succ) continue;
 
-                                // asan block transformation
-                                
-                                auto next = I.getNextNode();
-                                
-                                IRBuilder<> AsanB(next);
-                                
-                                AsanB.CreateBr(newSafeBlock);
+                            Instruction *splitPoint = PassUtils::findNextSafeInstruction(succ->getFirstNonPHI());
 
-                                next->eraseFromParent();
-                                I.eraseFromParent();
-                                
-                                break;
+                            // 4) Determine safe continuation
+                            BasicBlock *safeTarget = nullptr;
 
+                            if (!splitPoint) {
+                                safeTarget = PassUtils::findNextSafeBlock(succ,faultLine);
+                            } else {
+                                // We found a split point inside `succ` itself => split there to create safeTarget
+                                safeTarget = succ->splitBasicBlock(splitPoint, succ->getName() + ".safe");
+                            }
+
+                            // 5) Check if we found a target
+                            if (!safeTarget) {
+                                safeTarget = safeExit;
+                            }
+
+                            // 6) Update PHI nodes in safeTarget (or ipd) for new incoming edge from asanBlock
+                            // If safeTarget == ipd and we didn't split, we still must add incoming values to ipd's PHIs.
+                            for (PHINode &PN : safeTarget->phis()) {
+                                PN.addIncoming(UndefValue::get(PN.getType()), asanBlock);
+                            }
+
+                            // 7) Insert logger call, erase report, and replace terminator with branch to safeTarget
+                            CallInst *reportCI = dyn_cast<CallInst>(&I); // I is the __asan_report_* call
+
+                            // Insert logger call before the report call
+                            IRBuilder<> B(reportCI);
+                            Value *msgPtr = B.CreateGlobalStringPtr(logMsg);
+                            Value *srcPtr = B.CreateGlobalStringPtr(sourcefile);
+                            B.CreateCall(LogFunc, {msgPtr, srcPtr});
+
+                            // Erase report call
+                            reportCI->eraseFromParent();
+
+                            // Replace terminator (probably 'unreachable') with branch to the safe continuation
+                            Instruction *asanTerm = asanBlock->getTerminator();
+                            if (asanTerm) {
+                                asanTerm->eraseFromParent();
+                            }
+
+                            // Set builder to end of asanBlock (in case it had no terminator)
+                            B.SetInsertPoint(asanBlock);
+                            B.CreateBr(safeTarget);
+
+                            // errs() << "AsanPass: Patched violation site. Will log and continue to block: " << safeTarget->getName() << "\n";
+
+                            // We modified this block, so we're done with it.
+                            // Break from the inner loop (over Instructions)
+                            break;
                         }
                     }
                 }
@@ -110,18 +112,5 @@ PreservedAnalyses AsanPass::run(Module &M, ModuleAnalysisManager &AM) {
 }
 
 extern "C" ::llvm::PassPluginLibraryInfo llvmGetPassPluginInfo() {
-    return {
-        LLVM_PLUGIN_API_VERSION, "AsanPass", "v0.1",
-        [](PassBuilder &PB) {
-            PB.registerPipelineParsingCallback(
-                [](StringRef Name, ModulePassManager &MPM,
-                   ArrayRef<PassBuilder::PipelineElement>) {
-                    if (Name == "Asan-Pass") {
-                        MPM.addPass(AsanPass());
-                        return true;
-                    }
-                    return false;
-                });
-        }
-    };
+    return PassUtils::buildPassPluginInfo<AsanPass>("AsanPass","v0.1");
 }

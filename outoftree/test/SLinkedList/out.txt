@@ -1,0 +1,3 @@
+Compiling logger...
+Compiling Singly Linked List
+==== Running gepNullInList ====

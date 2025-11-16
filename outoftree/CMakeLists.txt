@@ -28,3 +28,13 @@ add_library(AsanPass SHARED src/AsanPass.cpp src/logger.cpp)
 set_target_properties(AsanPass PROPERTIES
     COMPILE_FLAGS "-fno-rtti"
 )
+
+add_library(GEP SHARED src/GEP.cpp src/logger.cpp) 
+set_target_properties(GEP PROPERTIES
+    COMPILE_FLAGS "-fno-rtti"
+)
+
+add_library(Memcpy SHARED src/Memcpy.cpp src/logger.cpp) 
+set_target_properties(Memcpy PROPERTIES
+    COMPILE_FLAGS "-fno-rtti"
+)
