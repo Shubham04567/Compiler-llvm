@@ -1,0 +1,1 @@
+[ Sun Nov 16 21:48:19 2025 ] ASAN violation in function: main at uafNextPointer.c:11
