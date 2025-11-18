@@ -1,8 +1,7 @@
 #pragma once
 #include "llvm/IR/PassManager.h"
-#include "llvm/IR/DebugLoc.h"
 #include "PassUtils.h"
 
-struct Memcpy : llvm::PassInfoMixin<Memcpy> {
+struct FreePass : llvm::PassInfoMixin<FreePass> {
     llvm::PreservedAnalyses run(llvm::Module &M,llvm::ModuleAnalysisManager &AM);
 };

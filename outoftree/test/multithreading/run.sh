@@ -4,12 +4,12 @@ set -e
 # ===========================
 # Configuration
 # ===========================
-ASAN_PASS="../../../build/libAsanPass.so"
-GEP_PASS="../../../build/libGEP.so"
-MEMCPYmv_PASS="../../../build/libMemcpymv.so"
-LOGGER_SRC="../../../src/logger.cpp"
-SLL_SRC="../sLinkedList.c"
-FREE_PASS="../../../build/libFreePass.so"
+ASAN_PASS="../../build/libAsanPass.so"
+GEP_PASS="../../build/libGEP.so"
+MEMCPYmv_PASS="../../build/libMemcpymv.so"
+LOGGER_SRC="../../src/logger.cpp"
+SLL_SRC="sLinkedList.c"
+FREE_PASS="../../build/libFreePass.so"
 
 # ===========================
 # Pre-checks
@@ -21,8 +21,6 @@ done
 
 echo "Compiling logger..."
 clang++ -c -fsanitize=address "$LOGGER_SRC" -o logger.o
-echo "Compiling Singly Linked List"
-clang -c -fsanitize=address "$SLL_SRC" -o  sll.o
 
 # ===========================
 # Function: compile + run test
@@ -43,11 +41,12 @@ run_test() {
     opt -load-pass-plugin "$GEP_PASS"    -passes="GEP"      "$name.asan.ll" -S -o "$name.gep.ll"
     opt -load-pass-plugin "$MEMCPYmv_PASS" -passes="Memcpymv"   "$name.gep.ll"  -S -o "$name.memcpymv.ll"
     opt -load-pass-plugin "$FREE_PASS" -passes="FreePass"   "$name.memcpymv.ll"  -S -o "$name.free.ll"
+
     # 3. Compile result
     clang -c "$name.free.ll" -o "$name.o"
 
     # 4. Link
-    clang -fsanitize=address logger.o  sll.o "$name.o"  -lstdc++ -o "$name.exe"
+    clang logger.o  "$name.o" -fsanitize=address -lstdc++ -o "$name.exe"
 
     # 5. Execute + check output
     echo "Running $name.exe..."
@@ -64,10 +63,9 @@ run_test() {
 # Run Tests
 # ===========================
 
-run_test DoubleFree.c
-run_test InvalidFree.c
-run_test uafNextPointer.c
-run_test UAFNodeAccess.c
+run_test mt_demo_safe.c
+run_test indMt.c
+
 
 echo "All tests passed!"
 

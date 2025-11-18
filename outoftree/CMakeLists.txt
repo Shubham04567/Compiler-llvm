@@ -34,7 +34,17 @@ set_target_properties(GEP PROPERTIES
     COMPILE_FLAGS "-fno-rtti"
 )
 
-add_library(Memcpy SHARED src/Memcpy.cpp src/logger.cpp) 
-set_target_properties(Memcpy PROPERTIES
+add_library(Memcpymv SHARED src/Memcpymv.cpp src/logger.cpp) 
+set_target_properties(Memcpymv PROPERTIES
+    COMPILE_FLAGS "-fno-rtti"
+)
+
+add_library(FreePass SHARED src/FreePass.cpp src/logger.cpp) 
+set_target_properties(FreePass PROPERTIES
+    COMPILE_FLAGS "-fno-rtti"
+)
+
+add_library(InitPtrPass MODULE src/InitPtrPass.cpp)
+set_target_properties(InitPtrPass PROPERTIES
     COMPILE_FLAGS "-fno-rtti"
 )

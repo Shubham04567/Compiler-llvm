@@ -6,22 +6,23 @@ set -e
 # ===========================
 ASAN_PASS="../../build/libAsanPass.so"
 GEP_PASS="../../build/libGEP.so"
-MEMCPY_PASS="../../build/libMemcpy.so"
+MEMCPYmv_PASS="../../build/libMemcpymv.so"
 LOGGER_SRC="../../src/logger.cpp"
 SLL_SRC="sLinkedList.c"
+FREE_PASS="../../build/libFreePass.so"
 
 # ===========================
 # Pre-checks
 # ===========================
-for f in "$ASAN_PASS" "$GEP_PASS" "$MEMCPY_PASS"; do
+for f in "$ASAN_PASS" "$GEP_PASS" "$MEMCPYmv_PASS"; do
     [[ -f "$f" ]] || { echo "Missing plugin: $f"; exit 1; }
 done
 [[ -f "$LOGGER_SRC" ]] || { echo "Missing logger: $LOGGER_SRC"; exit 1; }
 
 echo "Compiling logger..."
-clang++ -c "$LOGGER_SRC" -o logger.o
+clang++ -c -fsanitize=address "$LOGGER_SRC" -o logger.o
 echo "Compiling Singly Linked List"
-clang -c "$SLL_SRC" -o sll.o
+clang -c -fsanitize=address "$SLL_SRC"  -o sll.o
 
 # ===========================
 # Function: compile + run test
@@ -40,10 +41,11 @@ run_test() {
     # 2. Run passes
     opt -load-pass-plugin "$ASAN_PASS"   -passes="AsanPass" "$name.ll"      -S -o "$name.asan.ll"
     opt -load-pass-plugin "$GEP_PASS"    -passes="GEP"      "$name.asan.ll" -S -o "$name.gep.ll"
-    opt -load-pass-plugin "$MEMCPY_PASS" -passes="Memcpy"   "$name.gep.ll"  -S -o "$name.final.ll"
+    opt -load-pass-plugin "$MEMCPYmv_PASS" -passes="Memcpymv"   "$name.gep.ll"  -S -o "$name.memcpymv.ll"
+    opt -load-pass-plugin "$FREE_PASS" -passes="FreePass"   "$name.memcpymv.ll"  -S -o "$name.free.ll"
 
     # 3. Compile result
-    clang -c "$name.final.ll" -o "$name.o"
+    clang -c "$name.free.ll" -o "$name.o"
 
     # 4. Link
     clang logger.o  sll.o "$name.o" -fsanitize=address -lstdc++ -o "$name.exe"

@@ -33,13 +33,10 @@ int main() {
         if (rand() % 40 == 0) {
             char *a = rand() % 2 ? NULL : malloc(10);
             char *b = rand() % 2 ? NULL : malloc(10);
-            // if(a == NULL || b == NULL){
-            //     printf("it should fail\n");
-            // }
             memcpy(a, b, 5);  // many cases → validate Memcpy pass
         }
     }
 
-    // free_list(head);
+    free_list(head);
     return 0;
 }
