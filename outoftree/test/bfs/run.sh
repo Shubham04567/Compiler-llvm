@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 set -e
+InitPtr_PASS="../../build/libInitPtrPass.so"
 ASAN_PASS="../../build/libAsanPass.so"
 GEP_PASS="../../build/libGEP.so"
 MEMCPYmv_PASS="../../build/libMemcpymv.so"
@@ -25,7 +26,8 @@ run_test() {
   clang -O0 -g -fsanitize=address -S -emit-llvm "$src" -o "$name.ll"
 
   # run passes in order
-  opt -load-pass-plugin "$ASAN_PASS" -passes="AsanPass" "$name.ll" -S -o "$name.asan.ll"
+  opt -load-pass-plugin "$InitPtr_PASS"   -passes="InitPtrPass"  "$name.ll"      -S -o "$name.initptr.ll"
+  opt -load-pass-plugin "$ASAN_PASS"   -passes="AsanPass"  "$name.initptr.ll"      -S -o "$name.asan.ll"
   opt -load-pass-plugin "$GEP_PASS" -passes="GEP" "$name.asan.ll" -S -o "$name.gep.ll"
   opt -load-pass-plugin "$MEMCPYmv_PASS" -passes="Memcpymv" "$name.gep.ll" -S -o "$name.memcpymv.ll"
   opt -load-pass-plugin "$FREE_PASS" -passes="FreePass" "$name.memcpymv.ll" -S -o "$name.final.ll"
