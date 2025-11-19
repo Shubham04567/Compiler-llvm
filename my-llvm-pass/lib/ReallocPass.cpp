@@ -51,7 +51,7 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
                                 }
                             }
                         }
-                        
+                    
                         // Recursively 
                         Value *result = findHeapBase(storedVal, visited);
                         if (result) return result;
@@ -84,7 +84,7 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
     PreservedAnalyses run(Module &M, ModuleAnalysisManager &MAM) {
         LLVMContext &Ctx = M.getContext();
         const DataLayout &DL = M.getDataLayout();
-        errs() << "[asan-recover] running on module: " << M.getName() << "\n";
+        // errs() << "[asan-recover] running on module: " << M.getName() << "\n";
 
         // Types
         IntegerType *i8Ty = IntegerType::get(Ctx, 8);
@@ -121,7 +121,7 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
                 Value *newCall = builder.CreateCall(tracked_malloc_fn, {size});
                 CI->replaceAllUsesWith(newCall);
                 CI->eraseFromParent();
-                errs() << "[asan-recover] Replaced malloc with tracked_malloc\n";
+                // errs() << "[asan-recover] Replaced malloc with tracked_malloc\n";
             }
         }
 
@@ -154,6 +154,22 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
             i8PtrTy
         );
 
+        // Calculate offset between two pointers at runtime
+        FunctionCallee fn_calc_offset = M.getOrInsertFunction(
+            "calculate_pointer_offset",
+            i64Ty,     // returns offset
+            i8PtrTy,   // pointer
+            i8PtrTy    // base
+        );
+
+        // Apply offset to a new base
+        FunctionCallee fn_apply_offset = M.getOrInsertFunction(
+            "apply_offset_to_base",
+            i8PtrTy,   // returns adjusted pointer
+            i8PtrTy,   // new base
+            i64Ty      // offset
+        );
+
         // Collect instructions => illegal accesses
         std::vector<Instruction*> worklist;
         for (Function &F : M) {
@@ -161,6 +177,8 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
             for (BasicBlock &BB : F)
                 for (Instruction &I : BB)
                     if (isa<StoreInst>(&I))  
+                        worklist.push_back(&I);
+                    else if (isa<LoadInst>(&I))
                         worklist.push_back(&I);
         }
 
@@ -176,19 +194,22 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
                 Value *heapBase = findHeapBase(origPtr, visited);
 
                 if (!heapBase) {
-                    errs() << "[asan-recover] SKIPPING (no heap base found): " << *SI << "\n";
+                    // errs() << "[asan-recover] SKIPPING (no heap base found): " << *SI << "\n";
                     continue;
                 }
 
-                errs() << "[asan-recover] instrumenting Store: " << *SI << "\n";
-                errs() << "value: " << *val << "\n";
-                errs() << "pointer: " << *origPtr << "\n";
-                errs() << "Heap base: " << *heapBase << "\n";
+                // errs() << "[asan-recover] instrumenting Store: " << *SI << "\n";
+                // errs() << "value: " << *val << "\n";
+                // errs() << "pointer: " << *origPtr << "\n";
+                // errs() << "Heap base: " << *heapBase << "\n";
 
-                // Find the variable that holds the heap pointer (for updating after realloc)
+                // variable that holds the heap pointer (for updating after realloc)
                 Value *ptrVariable = nullptr;
+
                 if (auto *gep = dyn_cast<GetElementPtrInst>(origPtr)) {
                     Value *base = gep->getPointerOperand();
+
+                    // Trace back through nested GEPs
                     while (auto *innerGep = dyn_cast<GetElementPtrInst>(base)) {
                         base = innerGep->getPointerOperand();
                     }
@@ -203,8 +224,11 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
                 IRBuilder<> builder(I);
                 Value *origPtrI8 = builder.CreateBitCast(origPtr, i8PtrTy, "store.ptr.i8");
 
+                //split basic block
                 BasicBlock *origBB = I->getParent();
                 BasicBlock *contBB = origBB->splitBasicBlock(I, origBB->getName() + ".cont");
+
+                //removing the unconditional branch added by splitBasicBlock
                 origBB->getTerminator()->eraseFromParent();
 
                 Function *Fparent = origBB->getParent();
@@ -224,16 +248,34 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
                 // errBB -> handle illegal access
                 IRBuilder<> Berr(errBB);
                 Value *base_ptr = Berr.CreateBitCast(heapBase, i8PtrTy);
-                Value *newPtrI8 = Berr.CreateCall(fn_handle, {base_ptr, origPtrI8, sizeVal}, "rep.ptr");
                 
-                // Update the original pointer variable 
+
+                //check whether base_ptr id replaced or not
+                Value *updated_ptr = Berr.CreateCall(fn_get_new_base, {base_ptr}, "updated.base.ptr");
+
+                // Call the handler to get a new valid pointer
+                Value *newPtrI8 = Berr.CreateCall(fn_handle, {updated_ptr, origPtrI8, sizeVal}, "rep.ptr");
+
+                // Update the original pointer variable
+                // if their any pointer variable associated (with offset calculation)
+                // first find the offset of current pointer from base
+                // then apply the same offset to the new base pointer
                 if (ptrVariable) {
-
-                    Value *newBaseTyped = Berr.CreateCall(fn_get_new_base, {base_ptr});
-                    Berr.CreateStore(newBaseTyped, ptrVariable);
-
+                    // errs() << "Load Found pointer variable to update: " << *ptrVariable << "\n";
+                    
+                    Value *currentPtrVal = Berr.CreateLoad(i8PtrTy, ptrVariable, "current.ptr.val");
+                    Value *currentPtrI8 = Berr.CreateBitCast(currentPtrVal, i8PtrTy);
+                    
+                    // Calculate offset: current - base
+                    Value *offset = Berr.CreateCall(fn_calc_offset, {currentPtrI8, updated_ptr}, "ptr.offset");
+                    Value *newBase = Berr.CreateCall(fn_get_new_base, {updated_ptr}, "new.base");
+                    Value *newPtrWithOffset = Berr.CreateCall(fn_apply_offset, {newBase, offset}, "new.ptr.with.offset");
+                    
+                    // Store back
+                    Berr.CreateStore(newPtrWithOffset, ptrVariable);
+                    // errs() << "  Will update pointer variable with offset: " << *ptrVariable << "\n";
                 }
-                
+
                 Berr.CreateBr(contBB);
 
                 // merge in contBB
@@ -245,6 +287,116 @@ struct ReallocPass : public PassInfoMixin<ReallocPass> {
                 // update store pointer
                 Value *finalPtr = Bcont.CreateBitCast(phiPtr, origPtr->getType());
                 SI->setOperand(1, finalPtr);
+            }
+            // Handle LoadInst
+            else if (LoadInst *LI = dyn_cast<LoadInst>(I)) {
+                Value *origPtr = LI->getPointerOperand();
+
+                // heap base
+                std::set<Value*> visited;
+                Value *heapBase = findHeapBase(origPtr, visited);
+
+                if (!heapBase) {
+                    // errs() << "[asan-recover] SKIPPING LOAD (no heap base found): " << *LI << "\n";
+                    continue;
+                }
+
+                bool isHeap = false;
+                if (auto *call = dyn_cast<CallInst>(heapBase)) {
+                    if (Function *f = call->getCalledFunction()) {
+                        StringRef name = f->getName();
+                        if (name == "malloc" || name == "calloc" || name == "realloc" ||
+                            name == "tracked_malloc") {
+                            isHeap = true;
+                        }
+                    }
+                }
+
+                if (!isHeap) {
+                    // errs() << "[asan-recover] SKIPPING LOAD (not heap malloc): " << *LI << "\n";
+                    continue;
+                }
+
+                // errs() << "[asan-recover] instrumenting Load: " << *LI << "\n";
+                // errs() << "  pointer: " << *origPtr << "\n";
+                // errs() << "  Heap base: " << *heapBase << "\n";
+
+                // variable that holds the heap pointer
+                Value *ptrVariable = nullptr;
+                if (auto *gep = dyn_cast<GetElementPtrInst>(origPtr)) {
+                    Value *base = gep->getPointerOperand();
+                    while (auto *innerGep = dyn_cast<GetElementPtrInst>(base)) {
+                        base = innerGep->getPointerOperand();
+                    }
+                    if (auto *load = dyn_cast<LoadInst>(base)) {
+                        ptrVariable = load->getPointerOperand();
+                    }
+                }
+
+                uint64_t bytes = DL.getTypeStoreSize(LI->getType());
+                Value *sizeVal = ConstantInt::get(i64Ty, bytes);
+
+                IRBuilder<> builder(LI);
+                Value *origPtrI8 = builder.CreateBitCast(origPtr, i8PtrTy, "load.ptr.i8");
+
+                BasicBlock *origBB = LI->getParent();
+                BasicBlock *contBB = origBB->splitBasicBlock(LI, origBB->getName() + ".load.cont");
+                origBB->getTerminator()->eraseFromParent();
+
+                Function *Fparent = origBB->getParent();
+                BasicBlock *okBB = BasicBlock::Create(Ctx, origBB->getName() + ".load.ok", Fparent, contBB);
+                BasicBlock *errBB = BasicBlock::Create(Ctx, origBB->getName() + ".load.err", Fparent, contBB);
+                
+                // Insert check for valid address
+                IRBuilder<> Borig(origBB);
+                Value *isok_i32 = Borig.CreateCall(fn_isValid, {origPtrI8, sizeVal});
+                Value *isValid = Borig.CreateICmpNE(isok_i32, ConstantInt::get(i32Ty, 0));
+                Borig.CreateCondBr(isValid, okBB, errBB);
+
+                // okBB -> no problem
+                IRBuilder<> Bok(okBB);
+                Bok.CreateBr(contBB);
+
+                // errBB -> handle illegal access
+                IRBuilder<> Berr(errBB);
+                Value *base_ptr = Berr.CreateBitCast(heapBase, i8PtrTy);
+                
+                //check whether base_ptr id replaced or not
+                // if replaced, use the updated base pointer
+                Value *updated_ptr = Berr.CreateCall(fn_get_new_base, {base_ptr}, "updated.base.ptr");
+                Value *newPtrI8 = Berr.CreateCall(fn_handle, {updated_ptr, origPtrI8, sizeVal}, "rep.ptr.load");
+
+                // Update the base pointer variable if found
+                // if their any pointer variable associated (with offset calculation)
+                // first find the offset of current pointer from base
+                // then apply the same offset to the new base pointer
+                if (ptrVariable) {
+                    // errs() << "Store Found pointer variable to update: " << *ptrVariable << "\n";
+                    Value *currentPtrVal = Berr.CreateLoad(i8PtrTy, ptrVariable, "current.ptr.val");
+                    Value *currentPtrI8 = Berr.CreateBitCast(currentPtrVal, i8PtrTy);
+                    
+                    //Calculate offset: current - base
+                    Value *offset = Berr.CreateCall(fn_calc_offset, {currentPtrI8, updated_ptr}, "ptr.offset");
+                    Value *newBase = Berr.CreateCall(fn_get_new_base, {updated_ptr}, "new.base");
+                    Value *newPtrWithOffset = Berr.CreateCall(fn_apply_offset, {newBase, offset}, "new.ptr.with.offset");
+
+                    // Store back
+                    Berr.CreateStore(newPtrWithOffset, ptrVariable);
+                    
+                    // errs() << "  Will update pointer variable with offset: " << *ptrVariable << "\n";
+                }
+                
+                Berr.CreateBr(contBB);
+
+                // merge in contBB
+                IRBuilder<> Bcont(&*contBB->getFirstInsertionPt());
+                PHINode *phiPtr = Bcont.CreatePHI(i8PtrTy, 2, "merged.ptr.load");
+                phiPtr->addIncoming(origPtrI8, okBB);
+                phiPtr->addIncoming(newPtrI8, errBB);
+
+                // update load pointer
+                Value *finalPtr = Bcont.CreateBitCast(phiPtr, origPtr->getType());
+                LI->setOperand(0, finalPtr);
             }
         }
 

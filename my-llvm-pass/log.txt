@@ -1,0 +1,54 @@
+--- Ensuring output directory exists ---
+mkdir -p output
+--- 2. Generating LLVM IR ---
+clang -g -S -emit-llvm input/file04.c -o output/file01.ll
+--- 3. Running LLVM Pass ---
+opt -load-pass-plugin=build/libReallocPass3.so -passes="asan-pass" output/file01.ll -S -o output/file01.instrumented.ll
+[asan-recover] running on module: output/file01.ll
+[asan-recover] Replaced malloc with tracked_malloc
+[asan-recover] SKIPPING (no heap base found):   store ptr %2, ptr %1, align 8, !dbg !32
+[asan-recover] SKIPPING LOAD (no heap base found):   %3 = load ptr, ptr %1, align 8, !dbg !34
+[asan-recover] instrumenting Store:   store i32 1, ptr %5, align 4, !dbg !36
+value: i32 1
+pointer:   %5 = getelementptr inbounds [4 x i32], ptr %4, i64 0, i64 0, !dbg !34
+Heap base:   %2 = call ptr @tracked_malloc(i64 20), !dbg !33
+Load Found pointer variable to update:   %1 = alloca ptr, align 8
+  Will update pointer variable with offset:   %1 = alloca ptr, align 8
+[asan-recover] SKIPPING LOAD (no heap base found):   %8 = load ptr, ptr %1, align 8, !dbg !37
+[asan-recover] instrumenting Load:   %11 = load i32, ptr %10, align 4, !dbg !37
+  pointer:   %10 = getelementptr inbounds [4 x i32], ptr %9, i64 0, i64 11, !dbg !37
+  Heap base:   %2 = call ptr @tracked_malloc(i64 20), !dbg !33
+Store Found pointer variable to update:   %1 = alloca ptr, align 8
+  Will update pointer variable with offset:   %1 = alloca ptr, align 8
+--- 4. Compiling ASan Runtime ---
+clang++ -g -c lib/asan_runtime_simple.cpp -o output/asan_runtime.o
+--- 5. Compiling Instrumented IR ---
+clang -g -c output/file01.instrumented.ll -o output/file01.instrumented.o
+--- 6. Linking Final Executable ---
+clang++ -g output/file01.instrumented.o output/asan_runtime.o -o output/my_program
+
+***************************************************************************************
+
+--- 7. Running Instrumented Program ---
+./output/my_program
+[Runtime] tracked_malloc(20) = 0x55d6094492b0
+[Runtime] checking isAddressValid(0x55d6094492b4, 4)
+=> VALID
+[Runtime] checking isAddressValid(0x55d6094492e0, 4)
+=> INVALID
+[Runtime] get_new_base(0x55d6094492b0) = not relocated
+
+========================================
+[ASan] OUT-OF-BOUNDS ACCESS!
+[ASan] Base: 0x55d6094492b0, Current: 0x55d6094492e0, Size: 4
+[ASan] Old size: 20, Offset: 48, Needed: 52
+[ASan] Updated alloc_map: 0x55d609449310 -> size 52
+[ASan] SUCCESS! 0x55d6094492b0 -> 0x55d609449310, size 20 -> 52
+[ASan] New access: 0x55d609449340
+========================================
+
+[Runtime] calc_offset: 0x55d6094492b0 - 0x55d6094492b0 = 0 bytes
+[Runtime] get_new_base(0x55d6094492b0) = 0x55d609449310
+[Runtime] apply_offset: 0x55d609449310 + 0 = 0x55d609449310
+[Runtime] Updated alloc_map for 0x55d609449310 with size 52
+Accessing n->arr[0]: 0

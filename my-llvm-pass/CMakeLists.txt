@@ -16,3 +16,4 @@ add_library(ReallocPass MODULE lib/ReallocPass.cpp)
 set_target_properties(ReallocPass PROPERTIES
     COMPILE_FLAGS "-fno-rtti"
 )
+

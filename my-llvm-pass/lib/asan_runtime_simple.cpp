@@ -10,7 +10,7 @@ extern "C"{
     static std::map<void*, void*> ptr_relocations;
 
     int isAddressValid(void* addr, size_t size){
-        fprintf(stderr, "[Runtime] checking isAddressValid(%p, %zu)\n", addr, size);
+        // fprintf(stderr, "[Runtime] checking isAddressValid(%p, %zu)\n", addr, size);
         
         if(addr == nullptr){
             return 0;
@@ -24,12 +24,12 @@ extern "C"{
             size_t   len   = kv.second;
 
             if (a >= start && (a + s) <= (start + len)) {
-                fprintf(stderr, "=> VALID\n");
+                // fprintf(stderr, "=> VALID\n");
                 return 1;
             }
         }
 
-        fprintf(stderr, "=> INVALID\n");
+        // fprintf(stderr, "=> INVALID\n");
         return 0;
     }
 
@@ -48,11 +48,23 @@ extern "C"{
 
         auto it = alloc_map.find(base_ptr);
         if(it == alloc_map.end()){
-            fprintf(stderr, "[ASan] ERROR: Base %p not in map\n", base_ptr);
-            fprintf(stderr, "[ASan] Known allocations:\n");
-            for (auto &kv : alloc_map) {
-                fprintf(stderr, "  %p -> %zu bytes\n", kv.first, kv.second);
+            fprintf(stderr, "[ASan] ERROR: Base %p not in map: checking for replace\n", base_ptr);
+            auto replace_it = ptr_relocations.find(base_ptr);
+            if(replace_it != ptr_relocations.end()){
+                void* new_base = replace_it->second;
+                fprintf(stderr, "[ASan] Found relocated base %p -> %p\n", base_ptr, new_base);
+                base_ptr = new_base;
+                base = (uintptr_t)base_ptr; 
+                it = alloc_map.find(base_ptr);
+                if(it == alloc_map.end()){
+                    fprintf(stderr, "[ASan] ERROR: Relocated base %p also not in map\n", base_ptr);
+                    return nullptr;
+                }
             }
+            else {
+                fprintf(stderr, "[ASan] ERROR: No relocation found for base %p\n", base_ptr);
+            }
+
             return nullptr;
         }
 
@@ -73,6 +85,7 @@ extern "C"{
         }
 
         alloc_map[newBase] = needed;
+        fprintf(stderr, "[ASan] Updated alloc_map: %p -> size %zu\n", newBase, needed);
         ptr_relocations[base_ptr] = newBase;
         
         fprintf(stderr, "[ASan] SUCCESS! %p -> %p, size %zu -> %zu\n", base_ptr, newBase, oldSize, needed);
@@ -86,7 +99,7 @@ extern "C"{
 
 
     void update_pointer_after_realloc(void** ptr_var, void* new_access_ptr) {
-        fprintf(stderr, "[Runtime] update_pointer_after_realloc(%p, %p)\n", ptr_var, new_access_ptr);
+        // fprintf(stderr, "[Runtime] update_pointer_after_realloc(%p, %p)\n", ptr_var, new_access_ptr);
     }
     
     // Wrapper for malloc to track allocations
@@ -94,7 +107,7 @@ extern "C"{
         void* ptr = malloc(size);
         if (ptr) {
             alloc_map[ptr] = size;
-            fprintf(stderr, "[Runtime] tracked_malloc(%zu) = %p\n", size, ptr);
+            // fprintf(stderr, "[Runtime] tracked_malloc(%zu) = %p\n", size, ptr);
         }
         return ptr;
     }
@@ -103,13 +116,36 @@ extern "C"{
         auto it = ptr_relocations.find(base_ptr);
         if (it != ptr_relocations.end()) {
             void* new_base = it->second;
-            fprintf(stderr, "[Runtime] get_new_base(%p) = %p\n", base_ptr, new_base);
+            // fprintf(stderr, "[Runtime] get_new_base(%p) = %p\n", base_ptr, new_base);
             return new_base;
         } else {
-            fprintf(stderr, "[Runtime] get_new_base(%p) = not relocated\n", base_ptr);
+            // fprintf(stderr, "[Runtime] get_new_base(%p) = not relocated\n", base_ptr);
             
         }
         return base_ptr;
     }
+
+    // Calculate offset between pointer and base
+    int64_t calculate_pointer_offset(void* ptr, void* base) {
+        uintptr_t p = (uintptr_t)ptr;
+        uintptr_t b = (uintptr_t)base;
+        int64_t offset = (int64_t)(p - b);
+        // fprintf(stderr, "[Runtime] calc_offset: %p - %p = %ld bytes\n", ptr, base, offset);
+        return offset;
+    }
+
+    // Apply offset to a new base
+    void* apply_offset_to_base(void* new_base, int64_t offset) {
+        uintptr_t result = (uintptr_t)new_base + offset;
+        // fprintf(stderr, "[Runtime] apply_offset: %p + %ld = %p\n", new_base, offset, (void*)result);
+        auto it = alloc_map.find(new_base);
+        if (it != alloc_map.end()) {
+            alloc_map[(void*)result] = it->second - offset;
+            // fprintf(stderr, "[Runtime] Updated alloc_map for %p with size %zu\n", (void*)result, alloc_map[(void*)result]);
+        } else {
+            // fprintf(stderr, "[Runtime] WARNING: new_base %p not found in alloc_map\n", new_base);
+        }
+        return (void*)result;
+    }   
 
 }
