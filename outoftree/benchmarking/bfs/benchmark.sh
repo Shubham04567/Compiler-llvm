@@ -41,7 +41,7 @@ benchmark() {
 
 benchmark gcc
 benchmark clang
-benchmark myclang
+benchmark usaclang
 
 echo ""
 echo "Done. Results saved in time.txt"

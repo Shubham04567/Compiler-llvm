@@ -1,4 +1,4 @@
-CC        = myclang
+CC        = usaclang
 CFLAGS    = -O0 -g
 ASAN_OPTS = detect_leaks=0
 

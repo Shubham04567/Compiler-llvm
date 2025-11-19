@@ -31,10 +31,10 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BUILD_DIR="$REPO_ROOT/build"
 SRC_DIR="$REPO_ROOT/src"
 INC_DIR="$REPO_ROOT/include"
-INSTALL_DIR="$HOME/.local/myclang"
+INSTALL_DIR="$HOME/.local/usaclang"
 BIN_DIR="$HOME/.local/bin"
 
-print_status "Starting myclang installation..."
+print_status "Starting usaclang installation..."
 echo ""
 
 # ===========================
@@ -131,9 +131,9 @@ print_success "Copied logger.cpp"
 # ===========================
 # Step 5: Create wrapper script
 # ===========================
-print_status "Creating myclang wrapper script..."
+print_status "Creating usaclang wrapper script..."
 
-cat > "$INSTALL_DIR/myclang" << 'WRAPPER_EOF'
+cat > "$INSTALL_DIR/usaclang" << 'WRAPPER_EOF'
 #!/usr/bin/env bash
 set -euo pipefail
 
@@ -164,7 +164,7 @@ for file in "$InitPtr_PASS" "$ASAN_PASS" "$GEP_PASS" "$MEMCPYmv_PASS" "$FREE_PAS
 done
 
 # Directory for helper objects
-HELPER_DIR="${TMPDIR:-/tmp}/myclang_helpers_$$"
+HELPER_DIR="${TMPDIR:-/tmp}/usaclang_helpers_$$"
 mkdir -p "$HELPER_DIR"
 
 # Cleanup on exit
@@ -354,7 +354,7 @@ clang "$LOGGER_OBJ" "${ALL_OBJS[@]}" \
     -fsanitize=address -lstdc++ "${LINK_FLAGS[@]}" -o "$OUTPUT" 
 WRAPPER_EOF
 
-chmod +x "$INSTALL_DIR/myclang"
+chmod +x "$INSTALL_DIR/usaclang"
 print_success "Wrapper script created"
 
 # ===========================
@@ -362,8 +362,8 @@ print_success "Wrapper script created"
 # ===========================
 print_status "Creating symlink in $BIN_DIR..."
 
-ln -sf "$INSTALL_DIR/myclang" "$BIN_DIR/myclang"
-print_success "Symlink created: $BIN_DIR/myclang -> $INSTALL_DIR/myclang"
+ln -sf "$INSTALL_DIR/usaclang" "$BIN_DIR/usaclang"
+print_success "Symlink created: $BIN_DIR/usaclang -> $INSTALL_DIR/usaclang"
 
 # ===========================
 # Step 7: Detect shell and update PATH
@@ -389,7 +389,7 @@ if [[ -n "$SHELL_CONFIG" ]]; then
     else
         print_status "Adding $BIN_DIR to PATH in $SHELL_CONFIG..."
         echo "" >> "$SHELL_CONFIG"
-        echo "# Added by myclang installer" >> "$SHELL_CONFIG"
+        echo "# Added by usaclang installer" >> "$SHELL_CONFIG"
         echo "$PATH_EXPORT" >> "$SHELL_CONFIG"
         print_success "PATH configured"
     fi
@@ -414,12 +414,12 @@ TEST_OUTPUT="$TEST_DIR/test_output"
 cat > "$TEST_FILE" << 'TEST_EOF'
 #include <stdio.h>
 int main() {
-    printf("Hello from myclang!\n");
+    printf("Hello from usaclang!\n");
     return 0;
 }
 TEST_EOF
 
-if "$INSTALL_DIR/myclang" "$TEST_FILE" -o "$TEST_OUTPUT" ; then
+if "$INSTALL_DIR/usaclang" "$TEST_FILE" -o "$TEST_OUTPUT" ; then
     if [[ -x "$TEST_OUTPUT" ]]; then
         print_success "Installation test passed"
     else
@@ -439,7 +439,7 @@ echo -e "${GREEN}╔════════════════════
 echo -e "${GREEN}║${NC}  Installation Summary                                          ${GREEN}║${NC}"
 echo -e "${GREEN}╠════════════════════════════════════════════════════════════════╣${NC}"
 echo -e "${GREEN}║${NC}  Installed to: $INSTALL_DIR"
-echo -e "${GREEN}║${NC}  Symlink: $BIN_DIR/myclang"
+echo -e "${GREEN}║${NC}  Symlink: $BIN_DIR/usaclang"
 echo -e "${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}  ${YELLOW}Next steps:${NC}"
 echo -e "${GREEN}║${NC}    1. Reload your shell configuration:"
@@ -450,13 +450,13 @@ echo -e "${GREEN}║${NC}       ${BLUE}source ~/.bashrc${NC}  ${GREEN}# or ~/.zs
 fi
 echo -e "${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}    2. Verify installation:"
-echo -e "${GREEN}║${NC}       ${BLUE}which myclang${NC}"
+echo -e "${GREEN}║${NC}       ${BLUE}which usaclang${NC}"
 echo -e "${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}    3. Test compilation:"
-echo -e "${GREEN}║${NC}       ${BLUE}myclang test.c -o test${NC}"
+echo -e "${GREEN}║${NC}       ${BLUE}usaclang test.c -o test${NC}"
 echo -e "${GREEN}║${NC}"
 echo -e "${GREEN}║${NC}  ${YELLOW}Usage with build systems:${NC}"
-echo -e "${GREEN}║${NC}    CMake: ${BLUE}cmake -DCMAKE_C_COMPILER=myclang ..${NC}"
-echo -e "${GREEN}║${NC}    Make:  ${BLUE}make CC=myclang${NC}"
+echo -e "${GREEN}║${NC}    CMake: ${BLUE}cmake -DCMAKE_C_COMPILER=usaclang ..${NC}"
+echo -e "${GREEN}║${NC}    Make:  ${BLUE}make CC=usaclang${NC}"
 echo -e "${GREEN}╚════════════════════════════════════════════════════════════════╝${NC}"
 echo ""

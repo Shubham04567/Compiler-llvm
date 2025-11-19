@@ -52,6 +52,6 @@ int main() {
 
     // cleanup
     for (int i = 0; i < NODES; ++i) free_list(adj[i]);
-    // qfree(&q); (reflecting the bug in GEP Pass)
+
     return 0;
 }
