@@ -6,3 +6,6 @@ outoftree/build/
 *.ll
 *.o
 *.out
+*.asanlog
+*.txt
+

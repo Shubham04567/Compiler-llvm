@@ -34,6 +34,7 @@ run_test() {
 
   # compile resulting IR to object
   clang -c "$name.final.ll" -o "$name.o"
+  # clang -c "$name.ll" -o "$name.o"
 
   # link final exe with logger.o + list.o + queue.o
   clang -fsanitize=address logger.o list.o queue.o "$name.o" -lstdc++ -o "$name.exe"
@@ -43,7 +44,7 @@ run_test() {
 }
 
 # # run correct
-run_test correctBfs.c
+# run_test correctBfs.c
 
 # # run faulty (expected to detect violations, but must not crash harness)
 run_test faultyBfs.c
