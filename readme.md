@@ -1,4 +1,4 @@
-# LLVM Pass Framework for Runtime Bypass of Illegal Memory Accesses
+# Runtime Bypass of Illegal Memory Accesses
 
 A compiler pass framework built on LLVM that detects illegal memory accesses using AddressSanitizer (ASan) and modifies control flow to skip faulty instructions instead of aborting, enabling graceful error recovery and continued program execution.
 
