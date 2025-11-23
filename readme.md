@@ -309,8 +309,8 @@ make  # Tests file01.c
 
 ### Supported Error Types
 
-- ✅ Stack buffer overflow/underflow
-- ✅ Heap buffer overflow/underflow
+- ✅ Stack buffer overflow
+- ✅ Heap buffer overflow
 - ✅ Use-after-free
 - ✅ Double-free
 - ✅ Invalid free (freed pointer at offset)
